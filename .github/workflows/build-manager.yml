@@ -68,28 +68,30 @@ jobs:
       key_password: ${{ steps.gen.outputs.key_password }}
 
     steps:
-      - name: Generate temporary keystore
-        if: github.event_name == 'pull_request'
+      - name: 🔐 Generate temporary keystore
         id: gen
         run: |
+          set -euo pipefail
+
+          echo "🔐 Generating temporary signing passwords..."
           KEYSTORE_PASSWORD=$(openssl rand -hex 32)
           KEY_PASSWORD=$(openssl rand -hex 32)
-
-          echo "keystore_password=$KEYSTORE_PASSWORD" >> $GITHUB_OUTPUT
-          echo "key_password=$KEY_PASSWORD" >> $GITHUB_OUTPUT
-
+          echo "keystore_password=$KEYSTORE_PASSWORD" >> "$GITHUB_OUTPUT"
+          echo "key_password=$KEY_PASSWORD" >> "$GITHUB_OUTPUT"
+          echo "🔑 Generating temporary JKS keystore..."
           keytool -genkeypair \
-            -alias pr-key \
+            -alias ci-key \
             -keyalg RSA \
             -keysize 2048 \
-            -validity 1 \
+            -validity 3650 \
             -storepass "$KEYSTORE_PASSWORD" \
             -keypass "$KEY_PASSWORD" \
-            -dname "CN=KernelSU PR Build" \
+            -dname "CN=KernelSU CI Build" \
             -storetype JKS \
-            -keystore pr-key.jks
+            -keystore ci-key.jks
 
-          echo "keystore=$(base64 -w 0 pr-key.jks)" >> $GITHUB_OUTPUT
+          echo "keystore=$(base64 -w 0 ci-key.jks)" >> "$GITHUB_OUTPUT"
+          echo "✅ Temporary signing keystore generated successfully."
 
       - name: Extract certificate hash and size
         if: github.event_name == 'pull_request'
