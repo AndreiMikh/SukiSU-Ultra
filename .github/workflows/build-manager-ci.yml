@@ -1,0 +1,96 @@
+name: Build Manager CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main", "dev" ]
+    paths:
+      - '.github/workflows/build-manager.yml'
+      - '.github/workflows/build-lkm.yml'
+      - '.github/workflows/ddk-lkm.yml'
+      - '.github/workflows/ksud.yml'
+      - '.github/workflows/ksud-extra.yml'
+      - '.github/workflows/ksuinit.yml'
+      - '.github/scripts/setup-rust-build.sh'
+      - '.github/riscv64-cargo.toml'
+      - 'scripts/upload-telegram.sh'
+      - 'repack_apk.py'
+      - 'split_apk_by_arch.py'
+      - 'manager/**'
+      - 'kernel/**'
+      - 'userspace/**'
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+
+  pull_request:
+    branches: [ "main", "dev" ]
+    paths:
+      - '.github/workflows/build-manager.yml'
+      - '.github/workflows/build-lkm.yml'
+      - '.github/workflows/ddk-lkm.yml'
+      - '.github/workflows/ksud.yml'
+      - '.github/workflows/ksud-extra.yml'
+      - '.github/workflows/ksuinit.yml'
+      - '.github/scripts/setup-rust-build.sh'
+      - '.github/riscv64-cargo.toml'
+      - 'scripts/upload-telegram.sh'
+      - 'repack_apk.py'
+      - 'split_apk_by_arch.py'
+      - 'manager/**'
+      - 'kernel/**'
+      - 'userspace/**'
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+
+  workflow_call:
+    inputs:
+      release_upload:
+        description: 'Upload to the releases Telegram thread'
+        required: false
+        default: false
+        type: boolean
+      release_build:
+        description: 'Mark version metadata as a release build'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+
+  generate-key:
+    runs-on: ubuntu-latest
+
+    outputs:
+      expected_size: ${{ steps.extract.outputs.expected_size }}
+      expected_hash: ${{ steps.extract.outputs.expected_hash }}
+
+    steps:
+      # Generate one temporary keystore for this workflow run.
+      # The keystore and its passwords are transferred as a short-lived artifact,
+      # not as job outputs (GitHub may suppress outputs that look like secrets).
+      - name: Generate temporary signing keystore
+        id: gen
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "🔐 Generating temporary signing passwords..."
+          KEYSTORE_PASSWORD="$(openssl rand -hex 32)"
+          KEY_PASSWORD="$(openssl rand -hex 32)"
+
+          mkdir -p signing
+          printf 'KEYSTORE_PASSWORD=%s\nKEY_PASSWORD=%s\n' \
+            "$KEYSTORE_PASSWORD" "$KEY_PASSWORD" > signing/signing.env
+          chmod 600 signing/signing.env
+
+          echo "🔑 Creating JKS keystore..."
+          keytool -genkeypair \
+            -alias ci-key \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 3650 \
+            -storepass "$KEYSTORE_PASSWORD" \
+            -keypass "$KEY_PASSWORD" \
+            -dname "CN=KernelSU CI Build" \
+            -storetype JKS \
+            -keystore signing/ci-key.jks
